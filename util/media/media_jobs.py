@@ -10,8 +10,10 @@ from __future__ import annotations
 import logging
 import os
 import random
+import re
 from datetime import datetime
 from time import sleep
+from urllib.parse import urlsplit
 
 from tqdm import tqdm
 
@@ -224,10 +226,12 @@ def download_markdown_images(wb, wrote_count) -> None:
                     )
 
 
-def _split_media_urls(urls: str, separator: str) -> list[str]:
-    """按分隔符拆分媒体 URL 列表（跳过空项；无分隔符时视为单元素）。"""
+def split_media_urls(urls: str, separator: str) -> list[str]:
+    """拆分媒体列表；图片 URL 内的逗号保留，仅在下一 URL 前拆分。"""
     if not urls:
         return []
+    if separator == "," and urls.startswith(("http://", "https://", "//")):
+        return [url for url in re.split(r",(?=(?:https?:)?//|$)", urls) if url]
     if separator in urls:
         return [url for url in urls.split(separator) if url]
     return [urls]
@@ -235,6 +239,7 @@ def _split_media_urls(urls: str, separator: str) -> list[str]:
 
 def _image_suffix(url: str) -> str:
     """按 URL 末尾推断图片扩展名；不像扩展名（无点或长度 > 4）时回退 .jpg。"""
+    url = urlsplit(url).path
     index = url.rfind(".")
     if index < 0 or len(url) - index >= 5:
         return ".jpg"
@@ -250,12 +255,12 @@ def _media_file_names(wb, file_type, urls, w) -> list[tuple[str, str]]:
     file_prefix = wb._get_timestamp_prefix(w)
     pairs: list[tuple[str, str]] = []
     if file_type == "img":
-        url_list = _split_media_urls(urls, ",")
+        url_list = split_media_urls(urls, ",")
         for i, url in enumerate(url_list):
             numbered = "_" + str(i + 1) if len(url_list) > 1 else ""
             pairs.append((url, file_prefix + numbered + _image_suffix(url)))
     elif file_type == "video":
-        url_list = _split_media_urls(urls, ";")
+        url_list = split_media_urls(urls, ";")
         for i, url in enumerate(url_list):
             suffix = ".mov" if url.endswith(".mov") else ".mp4"
             numbered = "_" + str(i + 1) if len(url_list) > 1 else ""
@@ -263,8 +268,8 @@ def _media_file_names(wb, file_type, urls, w) -> list[tuple[str, str]]:
     elif file_type == "live_photo":
         # 使用 live_photo_indices 使 live_photo 文件名与对应图片文件名一致
         indices = w.get("live_photo_indices", [])
-        url_list = _split_media_urls(urls, ";")
-        pics_count = len([p for p in (w.get("pics", "") or "").split(",") if p])
+        url_list = split_media_urls(urls, ";")
+        pics_count = len(split_media_urls(w.get("pics", "") or "", ","))
         for j, url in enumerate(url_list):
             suffix = ".mov" if url.endswith(".mov") else ".mp4"
             idx = indices[j] if j < len(indices) else (j + 1)

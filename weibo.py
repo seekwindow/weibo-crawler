@@ -467,11 +467,12 @@ class Weibo(object):
                 if pic.get('type') == 'video':
                     continue
                 url = pic['large']['url']
-                # 将 URL 中的非原图尺寸标识替换为 large，确保获取原图
-                url = re.sub(
-                    r'/(mw\d+|bmiddle|thumb\d+|orj\d+|woriginal)/',
-                    '/large/', url
-                )
+                # 签名 URL 的路径也可能参与签名，不能改写尺寸标识。
+                if "ssig" not in parse_qs(urlparse(url).query):
+                    url = re.sub(
+                        r'/(mw\d+|bmiddle|thumb\d+|orj\d+|woriginal)/',
+                        '/large/', url
+                    )
                 pic_list.append(url)
 
         # 兼容正文里的“查看图片”类型链接，这类内容有时不落在 pics 数组里
@@ -1798,7 +1799,7 @@ class Weibo(object):
         except ValueError:
             return
 
-        pics = weibo["pics"].split(",")
+        pics = media_jobs.split_media_urls(weibo["pics"], ",")
         local_images = weibo.setdefault("_local_images", {})
         for i, pic_url in enumerate(pics):
             if not pic_url:
@@ -1832,7 +1833,7 @@ class Weibo(object):
         except ValueError:
             return []
 
-        pics = [pic for pic in weibo["pics"].split(",") if pic]
+        pics = media_jobs.split_media_urls(weibo["pics"], ",")
         local_images = weibo.get("_local_images") or {}
         file_names = []
         for i, pic_url in enumerate(pics):
